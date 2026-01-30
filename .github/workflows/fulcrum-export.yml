@@ -16,7 +16,7 @@ on:
       drive_folder:
         description: 'Google Drive folder name'
         required: false
-        default: 'Fulcrum Test'
+        default: 'Fulcrum-Auto Update/Initial Sync'
 
   # Scheduled run (optional - uncomment to enable)
   # schedule:
@@ -59,10 +59,10 @@ jobs:
             ARGS="$ARGS --test"
           fi
 
-          # Use input folder or default to "Fulcrum Test"
+          # Use input folder or default to "Fulcrum-Auto Update/Initial Sync"
           FOLDER="${{ github.event.inputs.drive_folder }}"
           if [ -z "$FOLDER" ]; then
-            FOLDER="Fulcrum Test"
+            FOLDER="Fulcrum-Auto Update/Initial Sync"
           fi
 
           echo "Running with folder: $FOLDER"

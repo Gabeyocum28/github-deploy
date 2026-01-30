@@ -47,7 +47,7 @@ SCRIPT_DIR = Path(__file__).parent
 class FulcrumToDriveExporter:
     """Export Fulcrum data directly to Google Drive"""
 
-    def __init__(self, fulcrum_token: str, drive_folder_name: str = "Fulcrum Test", pre_approved_forms: List[str] = None):
+    def __init__(self, fulcrum_token: str, drive_folder_name: str = "Fulcrum-Auto Update/Initial Sync", pre_approved_forms: List[str] = None):
         self.fulcrum_token = fulcrum_token
         self.drive_folder_name = drive_folder_name
         self.fulcrum_base_url = "https://api.fulcrumapp.com/api/v2"
@@ -1560,7 +1560,7 @@ def main():
     # Parse arguments
     since_date = None
     test_mode = '--test' in sys.argv
-    drive_folder = "Fulcrum Test"
+    drive_folder = "Fulcrum-Auto Update/Initial Sync"
     pre_approved_arg = None
     auto_confirm = '--yes' in sys.argv or '-y' in sys.argv
 
