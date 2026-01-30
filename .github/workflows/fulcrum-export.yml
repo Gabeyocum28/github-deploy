@@ -42,8 +42,9 @@ jobs:
 
       - name: Restore Google Drive credentials
         run: |
-          echo "${{ secrets.GOOGLE_TOKEN_PICKLE }}" | base64 -d > token.pickle
-          echo "Google Drive credentials restored"
+          echo "${{ secrets.GOOGLE_TOKEN_PICKLE }}" | base64 --decode > token.pickle
+          ls -la token.pickle
+          echo "Google Drive credentials restored ($(wc -c < token.pickle) bytes)"
 
       - name: Run Fulcrum Export
         env:
