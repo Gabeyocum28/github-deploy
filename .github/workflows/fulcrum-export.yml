@@ -1,0 +1,75 @@
+name: Fulcrum Export to Google Drive
+
+on:
+  # Manual trigger with optional parameters
+  workflow_dispatch:
+    inputs:
+      pre_approved_forms:
+        description: 'Pre-approved forms for deletion (e.g., "1,2,3" or form names)'
+        required: false
+        default: ''
+      test_mode:
+        description: 'Run in test mode (max 3 forms)'
+        required: false
+        type: boolean
+        default: false
+      drive_folder:
+        description: 'Google Drive folder name'
+        required: false
+        default: 'Fulcrum Test'
+
+  # Scheduled run (optional - uncomment to enable)
+  # schedule:
+  #   - cron: '0 6 * * *'  # Run daily at 6 AM UTC
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360  # 6 hour max (adjust as needed)
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Restore Google Drive credentials
+        run: |
+          echo "${{ secrets.GOOGLE_TOKEN_PICKLE }}" | base64 -d > token.pickle
+          echo "Google Drive credentials restored"
+
+      - name: Run Fulcrum Export
+        env:
+          FULCRUM_API_TOKEN: ${{ secrets.FULCRUM_API_TOKEN }}
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
+          PRE_APPROVED_FORMS: ${{ github.event.inputs.pre_approved_forms }}
+        run: |
+          ARGS="--yes"
+
+          if [ "${{ github.event.inputs.test_mode }}" = "true" ]; then
+            ARGS="$ARGS --test"
+          fi
+
+          if [ -n "${{ github.event.inputs.drive_folder }}" ]; then
+            ARGS="$ARGS --folder=${{ github.event.inputs.drive_folder }}"
+          fi
+
+          python fulcrum_to_drive.py $ARGS
+
+      - name: Upload logs as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: export-logs
+          path: |
+            fulcrum_to_drive.log
+            skipped_forms.json
+          retention-days: 7

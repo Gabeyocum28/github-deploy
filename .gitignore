@@ -1,0 +1,23 @@
+# Environment and secrets
+.env
+token.pickle
+credentials.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+venv/
+env/
+
+# Logs
+*.log
+fulcrum_to_drive.log
+
+# State files
+skipped_forms.json
+
+# IDE
+.vscode/
+.idea/
