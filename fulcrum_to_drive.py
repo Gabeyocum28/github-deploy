@@ -47,11 +47,12 @@ SCRIPT_DIR = Path(__file__).parent
 class FulcrumToDriveExporter:
     """Export Fulcrum data directly to Google Drive"""
 
-    def __init__(self, fulcrum_token: str, drive_folder_name: str = "Fulcrum-Auto Update/Initial Sync", pre_approved_forms: List[str] = None, skip_existing_check: bool = False, skip_deletions: bool = False):
+    def __init__(self, fulcrum_token: str, drive_folder_name: str = "Fulcrum-Auto Update/Initial Sync", pre_approved_forms: List[str] = None, skip_existing_check: bool = False, skip_deletions: bool = False, quick_check: bool = False):
         self.fulcrum_token = fulcrum_token
         self.drive_folder_name = drive_folder_name
         self.skip_existing_check = skip_existing_check  # Skip Drive listings for faster initial sync
         self.skip_deletions = skip_deletions  # Auto-skip all deletion requests
+        self.quick_check = quick_check  # Skip entire form if folder exists
         self.fulcrum_base_url = "https://api.fulcrumapp.com/api/v2"
         self.fulcrum_headers = {
             "X-ApiToken": fulcrum_token,
@@ -1554,7 +1555,18 @@ class FulcrumToDriveExporter:
             if self._export_cancelled:
                 break
 
-            logger.info(f"[{idx}/{len(forms)}] {form['name']}")
+            form_name = form['name']
+            safe_name = "".join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in form_name)
+
+            # Quick check: skip if form folder already exists
+            if self.quick_check:
+                parent_id = self.active_forms_id if form.get('_is_active', True) else self.inactive_forms_id
+                cache_key = f"{parent_id}/{safe_name}"
+                if cache_key in self._folder_cache:
+                    self.stats['forms_processed'] += 1
+                    continue
+
+            logger.info(f"[{idx}/{len(forms)}] {form_name}")
 
             # Retry logic for SSL/connection errors
             result = None
@@ -1676,6 +1688,7 @@ def main():
     test_mode = '--test' in sys.argv
     force_mode = '--force' in sys.argv  # Skip existence checks for faster initial sync
     skip_deletions = '--skip-deletions' in sys.argv  # Auto-skip all deletion requests
+    quick_check = '--quick-check' in sys.argv  # Skip forms if folder exists
     drive_folder = "Fulcrum-Auto Update/Initial Sync"
     pre_approved_arg = None
     auto_confirm = '--yes' in sys.argv or '-y' in sys.argv
@@ -1705,6 +1718,8 @@ def main():
         modes.append("force")
     if skip_deletions:
         modes.append("skip-deletions")
+    if quick_check:
+        modes.append("quick-check")
     mode_str = f" [{', '.join(modes)}]" if modes else ""
     logger.info(f"Folder: {drive_folder}{mode_str}")
 
@@ -1713,7 +1728,7 @@ def main():
         if response.lower() != 'yes':
             return
 
-    exporter = FulcrumToDriveExporter(fulcrum_token, drive_folder, pre_approved_forms=pre_approved_forms, skip_existing_check=force_mode, skip_deletions=skip_deletions)
+    exporter = FulcrumToDriveExporter(fulcrum_token, drive_folder, pre_approved_forms=pre_approved_forms, skip_existing_check=force_mode, skip_deletions=skip_deletions, quick_check=quick_check)
     exporter.export_all(since_date=since_date, test_mode=test_mode)
 
 

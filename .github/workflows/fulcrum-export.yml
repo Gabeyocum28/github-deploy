@@ -23,6 +23,11 @@ on:
         required: false
         type: boolean
         default: false
+      quick_check:
+        description: 'Quick check - skip forms if folder exists'
+        required: false
+        type: boolean
+        default: false
       drive_folder:
         description: 'Google Drive folder name'
         required: false
@@ -75,6 +80,10 @@ jobs:
 
           if [ "${{ github.event.inputs.skip_deletions }}" = "true" ]; then
             ARGS="$ARGS --skip-deletions"
+          fi
+
+          if [ "${{ github.event.inputs.quick_check }}" = "true" ]; then
+            ARGS="$ARGS --quick-check"
           fi
 
           # Use input folder or default to "Fulcrum-Auto Update/Initial Sync"
