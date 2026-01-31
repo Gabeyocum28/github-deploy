@@ -242,7 +242,9 @@ class FulcrumToDriveExporter:
                 pickle.dump(creds, token)
 
         self.drive_creds = creds  # Store for thread-local services
+        self._token_path = token_path  # Store for refresh
         self.drive_service = build('drive', 'v3', credentials=creds)
+        self._last_token_refresh = time.time()
 
         # Find the target folder (supports nested paths like "Parent/Child/Grandchild")
         folder_path = self.drive_folder_name.split('/')
@@ -282,6 +284,26 @@ class FulcrumToDriveExporter:
         self.inactive_forms_id = self._get_or_create_folder("inactive_forms", self.drive_folder_id)
 
         return True
+
+    def _refresh_drive_token_if_needed(self):
+        """Refresh Google Drive token if it's been more than 45 minutes"""
+        elapsed = time.time() - self._last_token_refresh
+        if elapsed > 45 * 60:  # 45 minutes
+            try:
+                if self.drive_creds and self.drive_creds.expired:
+                    logger.info("Refreshing Google Drive token...")
+                    self.drive_creds.refresh(Request())
+                    # Save refreshed token
+                    with open(self._token_path, 'wb') as token:
+                        pickle.dump(self.drive_creds, token)
+                    # Rebuild service with refreshed creds
+                    self.drive_service = build('drive', 'v3', credentials=self.drive_creds)
+                    # Clear thread-local services so they rebuild
+                    self._thread_local = threading.local()
+                    logger.info("Token refreshed successfully")
+                self._last_token_refresh = time.time()
+            except Exception as e:
+                logger.warning(f"Token refresh failed: {e}")
 
     def _get_thread_service(self):
         """Get a thread-local Drive service for safe concurrent uploads"""
@@ -1446,6 +1468,9 @@ class FulcrumToDriveExporter:
         # Process each form
         results = []
         for idx, form in enumerate(forms, 1):
+            # Refresh Google Drive token if needed (prevents timeout after ~1 hour)
+            self._refresh_drive_token_if_needed()
+
             # Check if export was cancelled via Slack
             if self._export_cancelled:
                 logger.info("\nExport cancelled by user request")
