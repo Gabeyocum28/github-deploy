@@ -18,6 +18,11 @@ on:
         required: false
         type: boolean
         default: false
+      skip_deletions:
+        description: 'Auto-skip all deletion requests'
+        required: false
+        type: boolean
+        default: false
       drive_folder:
         description: 'Google Drive folder name'
         required: false
@@ -66,6 +71,10 @@ jobs:
 
           if [ "${{ github.event.inputs.force_mode }}" = "true" ]; then
             ARGS="$ARGS --force"
+          fi
+
+          if [ "${{ github.event.inputs.skip_deletions }}" = "true" ]; then
+            ARGS="$ARGS --skip-deletions"
           fi
 
           # Use input folder or default to "Fulcrum-Auto Update/Initial Sync"

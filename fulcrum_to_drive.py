@@ -47,10 +47,11 @@ SCRIPT_DIR = Path(__file__).parent
 class FulcrumToDriveExporter:
     """Export Fulcrum data directly to Google Drive"""
 
-    def __init__(self, fulcrum_token: str, drive_folder_name: str = "Fulcrum-Auto Update/Initial Sync", pre_approved_forms: List[str] = None, skip_existing_check: bool = False):
+    def __init__(self, fulcrum_token: str, drive_folder_name: str = "Fulcrum-Auto Update/Initial Sync", pre_approved_forms: List[str] = None, skip_existing_check: bool = False, skip_deletions: bool = False):
         self.fulcrum_token = fulcrum_token
         self.drive_folder_name = drive_folder_name
         self.skip_existing_check = skip_existing_check  # Skip Drive listings for faster initial sync
+        self.skip_deletions = skip_deletions  # Auto-skip all deletion requests
         self.fulcrum_base_url = "https://api.fulcrumapp.com/api/v2"
         self.fulcrum_headers = {
             "X-ApiToken": fulcrum_token,
@@ -452,6 +453,11 @@ class FulcrumToDriveExporter:
 
         if not orphaned_files:
             return 0, 'approved'
+
+        # Auto-skip all deletions if flag is set
+        if self.skip_deletions:
+            logger.info(f"  Auto-skipping deletion of {len(orphaned_files)} orphaned photos (--skip-deletions)")
+            return 0, 'skipped'
 
         # Check if this form is pre-approved (auto-approve without Slack wait)
         if form_name in self._pre_approved_forms:
@@ -1684,6 +1690,7 @@ def main():
     since_date = None
     test_mode = '--test' in sys.argv
     force_mode = '--force' in sys.argv  # Skip existence checks for faster initial sync
+    skip_deletions = '--skip-deletions' in sys.argv  # Auto-skip all deletion requests
     drive_folder = "Fulcrum-Auto Update/Initial Sync"
     pre_approved_arg = None
     auto_confirm = '--yes' in sys.argv or '-y' in sys.argv
@@ -1712,6 +1719,8 @@ def main():
         logger.info("TEST MODE: Will process max 3 forms")
     if force_mode:
         logger.info("FORCE MODE: Skipping existence checks (faster initial sync)")
+    if skip_deletions:
+        logger.info("SKIP DELETIONS: All photo deletions will be skipped")
     if pre_approved_forms:
         logger.info(f"Pre-approved forms for deletion: {len(pre_approved_forms)}")
 
@@ -1721,7 +1730,7 @@ def main():
             logger.info("Export cancelled")
             return
 
-    exporter = FulcrumToDriveExporter(fulcrum_token, drive_folder, pre_approved_forms=pre_approved_forms, skip_existing_check=force_mode)
+    exporter = FulcrumToDriveExporter(fulcrum_token, drive_folder, pre_approved_forms=pre_approved_forms, skip_existing_check=force_mode, skip_deletions=skip_deletions)
     exporter.export_all(since_date=since_date, test_mode=test_mode)
 
 
