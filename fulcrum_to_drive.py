@@ -47,9 +47,10 @@ SCRIPT_DIR = Path(__file__).parent
 class FulcrumToDriveExporter:
     """Export Fulcrum data directly to Google Drive"""
 
-    def __init__(self, fulcrum_token: str, drive_folder_name: str = "Fulcrum-Auto Update/Initial Sync", pre_approved_forms: List[str] = None):
+    def __init__(self, fulcrum_token: str, drive_folder_name: str = "Fulcrum-Auto Update/Initial Sync", pre_approved_forms: List[str] = None, skip_existing_check: bool = False):
         self.fulcrum_token = fulcrum_token
         self.drive_folder_name = drive_folder_name
+        self.skip_existing_check = skip_existing_check  # Skip Drive listings for faster initial sync
         self.fulcrum_base_url = "https://api.fulcrumapp.com/api/v2"
         self.fulcrum_headers = {
             "X-ApiToken": fulcrum_token,
@@ -64,6 +65,8 @@ class FulcrumToDriveExporter:
         self.active_forms_id = None
         self.inactive_forms_id = None
         self._folder_cache = {}  # Cache folder IDs to avoid repeated lookups
+        self._contents_cache = {}  # Cache folder contents to avoid repeated listings
+        self._new_folders = set()  # Track newly created folders (known to be empty)
 
         # Stats
         self.stats = {
@@ -333,10 +336,20 @@ class FulcrumToDriveExporter:
         folder = self.drive_service.files().create(body=metadata, fields='id').execute()
         folder_id = folder.get('id')
         self._folder_cache[cache_key] = folder_id
+        self._new_folders.add(folder_id)  # Track as newly created (empty)
         return folder_id
 
-    def _list_drive_folder_contents(self, folder_id: str) -> Set[str]:
-        """List all file names in a Drive folder"""
+    def _list_drive_folder_contents(self, folder_id: str, use_cache: bool = True) -> Set[str]:
+        """List all file names in a Drive folder (with caching)"""
+        # Check cache first
+        if use_cache and folder_id in self._contents_cache:
+            return self._contents_cache[folder_id]
+
+        # Check if this is a newly created folder (empty)
+        if folder_id in self._new_folders:
+            self._contents_cache[folder_id] = set()
+            return set()
+
         all_files = set()
         page_token = None
 
@@ -355,6 +368,10 @@ class FulcrumToDriveExporter:
             page_token = results.get('nextPageToken')
             if not page_token:
                 break
+
+        # Cache the results
+        if use_cache:
+            self._contents_cache[folder_id] = all_files
 
         return all_files
 
@@ -1098,17 +1115,21 @@ class FulcrumToDriveExporter:
         # Get or create photos folder
         photos_folder_id = self._get_or_create_folder("photos", form_folder_id)
 
-        # List existing photos in Drive
-        logger.info("  Checking existing photos in Drive...")
-        existing_photos = self._list_drive_folder_contents(photos_folder_id)
-        logger.info(f"  Found {len(existing_photos)} existing photos")
-
         # Collect all photos from records
         all_photos = []
         for record in records:
             all_photos.extend(self.extract_photo_ids(record))
 
         logger.info(f"  Form has {len(all_photos)} total photos")
+
+        # Check existing photos (skip if --force flag or new folder)
+        if self.skip_existing_check:
+            logger.info("  Skipping existence check (--force mode)")
+            existing_photos = set()
+        else:
+            logger.info("  Checking existing photos in Drive...")
+            existing_photos = self._list_drive_folder_contents(photos_folder_id)
+            logger.info(f"  Found {len(existing_photos)} existing photos")
 
         # Filter to only missing photos
         photos_to_download = []
@@ -1603,6 +1624,7 @@ def main():
     # Parse arguments
     since_date = None
     test_mode = '--test' in sys.argv
+    force_mode = '--force' in sys.argv  # Skip existence checks for faster initial sync
     drive_folder = "Fulcrum-Auto Update/Initial Sync"
     pre_approved_arg = None
     auto_confirm = '--yes' in sys.argv or '-y' in sys.argv
@@ -1629,6 +1651,8 @@ def main():
         logger.info(f"Filtering forms since: {since_date}")
     if test_mode:
         logger.info("TEST MODE: Will process max 3 forms")
+    if force_mode:
+        logger.info("FORCE MODE: Skipping existence checks (faster initial sync)")
     if pre_approved_forms:
         logger.info(f"Pre-approved forms for deletion: {len(pre_approved_forms)}")
 
@@ -1638,7 +1662,7 @@ def main():
             logger.info("Export cancelled")
             return
 
-    exporter = FulcrumToDriveExporter(fulcrum_token, drive_folder, pre_approved_forms=pre_approved_forms)
+    exporter = FulcrumToDriveExporter(fulcrum_token, drive_folder, pre_approved_forms=pre_approved_forms, skip_existing_check=force_mode)
     exporter.export_all(since_date=since_date, test_mode=test_mode)
 
 
